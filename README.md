@@ -145,3 +145,240 @@ Prisma Docs
   id: id,
   },
   });
+
+# Server Actions
+
+- asynchronous server functions that can be called directly from your components.
+
+- typical setup for server state mutations (create, update, delete)
+
+- endpoint on the server (api route on Next.js)
+  make request from the front-end
+  setup form, handle submission etc
+  Next.js server actions allow you to mutate server state directly from within a React component by defining server-side logic alongside client-side interactions.
+
+- Rules :
+
+must be async
+add 'use server' in function body
+use only in React Server Component
+export default function ServerComponent() {
+async function myAction(formData) {
+'use server';
+// access input values with formData
+// formData.get('name')
+// mutate data (server)
+// revalidate cache
+}
+
+return <form action={myAction}>...</form>;
+}
+
+# UseFormStatus && UseFormState
+
+'use client';
+import { createTaskCustom } from '@/utils/actions';
+import { useFormStatus, useFormState } from 'react-dom';
+// The useFormStatus Hook provides status information of the last form submission.
+// useFormState is a Hook that allows you to update state based on the result of a form action.
+
+const SubmitButton = () => {
+const { pending } = useFormStatus();
+
+return (
+<button
+      type='submit'
+      className='btn join-item btn-primary'
+      disabled={pending}
+    >
+{pending ? 'please wait... ' : 'create task'}
+</button>
+);
+};
+
+const initialState = {
+message: null,
+};
+
+const TaskForm = () => {
+const [state, formAction] = useFormState(createTaskCustom, initialState);
+
+return (
+
+<form action={formAction}>
+{state.message ? <p className='mb-2'>{state.message}</p> : null}
+<div className='join w-full'>
+<input
+          className='input input-bordered join-item w-full'
+          placeholder='Type Here'
+          type='text'
+          name='content'
+          required
+        />
+<SubmitButton />
+</div>
+</form>
+);
+};
+export default TaskForm;
+
+# Extra - More User Input Validation Options
+
+required attribute a great start
+zod library
+The Zod library is a TypeScript-first schema declaration and validation library that allows developers to create complex type checks with simple syntax.
+
+- npm install zod
+- actions
+  import { z } from 'zod';
+
+export const createTaskCustom = async (prevState, formData) => {
+await new Promise((resolve) => setTimeout(resolve, 2000));
+const content = formData.get('content');
+
+const Task = z.object({
+content: z.string().min(5),
+});
+
+// some validation here
+try {
+Task.parse({
+content,
+});
+await prisma.task.create({
+data: {
+content,
+},
+});
+// revalidate path
+revalidatePath('/tasks');
+return { message: 'success!!!' };
+} catch (error) {
+console.log(error);
+// can't return error
+return { message: 'error...' };
+}
+};
+
+# Providers
+
+- npm install react-hot-toast
+- create providers.js file in app
+  'use client';
+  import { Toaster } from 'react-hot-toast';
+
+const Providers = ({ children }) => {
+return (
+<>
+<Toaster />
+{children}
+</>
+);
+};
+export default Providers;
+
+- layout.js
+  import Providers from './providers';
+  export default function RootLayout({ children }) {
+  return (
+  <html lang='en'>
+  <body className={inter.className}>
+  <Navbar />
+  <main className='px-8 py-20 max-w-6xl mx-auto'>
+  <Providers>{children}</Providers>
+  </main>
+  </body>
+  </html>
+  );
+  }
+
+# Route Handlers
+
+install Thunder Client
+Route Handlers allow you to create custom request handlers for a given route using the Web Request and Response APIs.
+
+in app create folder "api"
+in there create folder "tasks" with route.js file
+The following HTTP methods are supported: GET, POST, PUT, PATCH, DELETE, HEAD, and OPTIONS. If an unsupported method is called, Next.js will return a 405 Method Not Allowed response.
+
+In addition to supporting native Request and Response. Next.js extends them with NextRequest and NextResponse to provide convenient helpers for advanced use cases.
+
+app/api/tasks/route.js
+// the following HTTP methods are supported: GET, POST, PUT, PATCH, DELETE, HEAD, and OPTIONS. If an unsupported method is called, Next.js will return a 405 Method Not Allowed response.
+
+import { NextResponse } from 'next/server';
+import db from '@/utils/db';
+
+export const GET = async (request) => {
+const tasks = await db.task.findMany();
+return Response.json({ data: tasks });
+// return NextResponse.json({ data: tasks });
+};
+
+export const POST = async (request) => {
+const data = await request.json();
+const task = await db.task.create({
+data: {
+content: data.content,
+},
+});
+return NextResponse.json({ data: task });
+};
+
+# Middleware
+
+Middleware in Next.js is a piece of code that allows you to perform actions before a request is completed and modify the response accordingly.
+
+create middleware.js in the root
+by default will be invoked for every route in your project
+export function middleware(request) {
+return Response.json({ msg: 'hello there' });
+}
+
+export const config = {
+matcher: '/about',
+};
+
+import { NextResponse } from 'next/server';
+
+// This function can be marked `async` if using `await` inside
+export function middleware(request) {
+return NextResponse.redirect(new URL('/', request.url));
+}
+
+// See "Matching Paths" below to learn more
+export const config = {
+matcher: ['/about/:path*', '/tasks/:path*'],
+};
+
+# PlanetScale
+
+- Host DB
+
+- set DATABASE_URL in .env
+  generator client {
+  provider = "prisma-client-js"
+  }
+  datasource db {
+  provider = "mysql"
+  url = env("DATABASE_URL")
+  relationMode = "prisma"
+  }
+
+- npx prisma db push
+
+# Local Build
+
+- Setup App
+- package.json
+  "build": "npx prisma generate && next build",
+- clean out the Database
+- npm run build
+- npm run dev
+
+# Force Dynamic
+
+- tasks.js
+  export const dynamic = 'force-dynamic';
+
+# Deploy
